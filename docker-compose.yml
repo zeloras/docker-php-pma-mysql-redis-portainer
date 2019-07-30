@@ -1,0 +1,104 @@
+version: "3"
+services:
+  nginx:
+    image: nginx:latest
+    container_name: nginx_server_geekcms
+    volumes:
+      - ./${DOCKER_PHP_PATH}:/var/www/html:rw
+      - ./Docker/nginx/conf:/etc/nginx/conf.d:rw
+      - ./Docker/php/conf/php.ini:/usr/local/etc/php/php.ini:rw
+      - ./logs/nginx:/var/log/nginx:rw
+    depends_on:
+      - php
+    env_file:
+      - .env
+    ports:
+      - 81:80
+      - 443:443
+    networks:
+      - internal
+
+  redis:
+    build: ./${DOCKER_REDIS_PATH}
+    container_name: redis_server_geekcms
+    hostname: ${REDIS_HOST}
+    volumes:
+      - ./${DOCKER_REDIS_PATH}/conf:/data:rw
+      - ./${DOCKER_REDIS_PATH}/data:/backup:rw
+      - ./logs/redis:/var/logs/redis:rw
+    ports:
+      - ${REDIS_PORT}:${REDIS_PORT}
+    env_file:
+      - .env
+    networks:
+      - internal
+
+  portainer:
+    container_name: portainer_apistrong_geekcms
+    image: portainer/portainer
+    ports:
+      - 9191:9000
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - /Docker/portainer/data:/data
+    depends_on:
+      - nginx
+    networks:
+      - internal
+  php:
+    build:
+      context: ./${DOCKER_PHP_PATH}
+      args:
+        CRONTAB_NAME: ${CRONTAB_NAME}
+    container_name: php_fpm_geekcms
+    command: "sh ./docker_entrypoint.sh"
+    depends_on:
+      - db
+    volumes:
+      - ./${DOCKER_PHP_PATH}:/var/www/html:rw
+      - ./Docker/php/conf/php.ini:/usr/local/etc/php/php.ini:rw
+    env_file:
+      - .env
+    environment:
+      XDEBUG_CONFIG: "remote_host=192.168.220.1 remote_enable=1"
+      PHP_IDE_CONFIG: "serverName=Docker"
+    ports:
+      - 8080:8080
+    networks:
+      - internal
+
+  db:
+    image: mysql:5.7
+    restart: always
+    container_name: mysql_server_geekcms
+    env_file:
+      - .env
+    volumes:
+      - ./Docker/mysql/conf:/etc/mysql/:rw
+      - ./Docker/mysql/data:/var/lib/mysql
+    ports:
+      - 8086:3306
+    networks:
+      - internal
+
+  phpmyadmin:
+    container_name: phpmyadmin_geekcms
+    image: phpmyadmin/phpmyadmin
+    env_file:
+      - .env
+    environment:
+      PMA_ARBITRARY: 1
+    ports:
+      - 8181:80
+    depends_on:
+      - db
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 192.168.220.0/28

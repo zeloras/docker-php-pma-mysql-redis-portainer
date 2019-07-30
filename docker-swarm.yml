@@ -1,0 +1,92 @@
+version: "3"
+services:
+  nginx:
+    image: nginx:latest
+    volumes:
+      - ./${DOCKER_PHP_PATH}:/var/www/html:rw
+      - ./Docker/nginx/conf:/etc/nginx/conf.d:rw
+      - ./Docker/php/conf/php.ini:/usr/local/etc/php/php.ini:rw
+      - ./logs/nginx:/var/log/nginx:rw
+    depends_on:
+      - php
+    ports:
+      - 80:80
+      - 443:443
+    networks:
+      - webnet
+
+  redis:
+    image: ${DOCKER_REDIS}:latest
+    env_file:
+      - .env
+    volumes:
+      - ./${DOCKER_REDIS_PATH}/conf:/data:rw
+      - ./${DOCKER_REDIS_PATH}/data:/backup:rw
+      - ./logs/redis:/var/logs/redis:rw
+    ports:
+      - ${REDIS_PORT}:${REDIS_PORT}
+    networks:
+      - webnet
+
+  portainer:
+    image: portainer/portainer
+    restart: always
+    ports:
+      - 9191:9000
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - portainer_data:/data
+    depends_on:
+      - nginx
+    deploy:
+      mode: global
+      placement:
+        constraints: [node.role == manager]
+    networks:
+      - webnet
+
+  db:
+    image: mysql:5.7
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./Docker/mysql/conf:/etc/mysql/:rw
+      - ./Docker/mysql/data:/var/lib/mysql
+    ports:
+      - 8086:3306
+    networks:
+      - webnet
+
+  php:
+    image: ${DOCKER_PHP}:latest
+    command: "sh ./docker_entrypoint.sh"
+    depends_on:
+      - db
+    env_file:
+      - .env
+    volumes:
+      - ./${DOCKER_PHP_PATH}:/var/www/html:rw
+      - ./Docker/php/conf/php.ini:/usr/local/etc/php/php.ini:rw
+    networks:
+      - webnet
+  
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    env_file:
+      - .env
+    environment:
+      PMA_ARBITRARY: 1
+    ports:
+      - 8181:80
+    depends_on:
+      - db
+    networks:
+      - webnet
+      
+networks:
+  webnet:
+    driver: overlay
+
+volumes:
+  portainer_data:
